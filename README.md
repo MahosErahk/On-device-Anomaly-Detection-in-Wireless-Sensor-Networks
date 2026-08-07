@@ -1,6 +1,6 @@
 # UV Wireless Sensor Network Anomaly Detection
 
-This repository contains the implementation of a TinyML-based anomaly detection framework for ultraviolet (UV) wireless sensor networks.
+This repository contains the implementation of an Intelligent Anomaly Detection framework for ultraviolet (UV) wireless sensor networks.
 
 ## Features
 
