@@ -11,4 +11,4 @@ This repository contains the implementation of an Intelligent Anomaly Detection 
 - Model evaluation
 - Demonstration scripts
 
-> 🚧 This repository is currently under active development. The codebase is being refactored from a research prototype into a modular Python project.
+>  The codebase is being refactored from a research prototype into a modular Python project.
