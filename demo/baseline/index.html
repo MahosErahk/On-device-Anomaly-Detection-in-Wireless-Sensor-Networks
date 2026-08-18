@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>CIR Inference — Baseline CAE</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  body { font-family: system-ui, Arial; margin:24px; }
+  input, button, select { padding:6px 8px; margin:0 8px 0 6px; }
+  .row { margin:10px 0; display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+  table { border-collapse:collapse; margin-top:14px; width:560px; }
+  th, td { border:1px solid #e1e4e8; padding:8px 10px; text-align:left; }
+  th { background:#f6f8fa; }
+  pre { background:#f6f8fa; padding:12px; border-radius:6px; white-space:pre-wrap; max-height:140px; overflow:auto; }
+  canvas { width:100%; height:320px; }
+  .muted { color:#666; font-size:0.9em; }
+  .dim { opacity:.6; }
+</style>
+</head>
+<body>
+
+<h2>CIR Inference — Baseline CAE</h2>
+
+<!-- Dataset + sample selector -->
+<div class="row">
+  <label>Dataset:</label>
+  <select id="fileSelect" style="min-width:220px;"></select>
+
+  <label>Sample index:</label>
+  <input id="sampleIndex" type="number" value="0" min="0" style="width:90px;" disabled>
+  <span id="sampleCount" class="muted"></span>
+</div>
+
+<div class="row">
+  <strong>Active:</strong> <span id="activeBatch">(none)</span>
+</div>
+
+<hr/>
+
+<h3>CIR — Input vs Reconstruction</h3>
+<canvas id="cirChart" class="dim"></canvas>
+
+<h3>Results</h3>
+<table id="resultsTable" style="display:none;">
+  <thead><tr><th>Metric</th><th>Value</th><th>Units</th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<h4>Raw Response (truncated)</h4>
+<pre id="out">{}</pre>
+
+<script>
+const $ = id => document.getElementById(id);
+
+let currentCIR=null, currentT=null, totalSamples=0, cirChart, debounceTimer=null;
+
+// helper utilities
+function truncate(obj){
+  try {
+    let t = typeof obj==="string" ? obj : JSON.stringify(obj,null,2);
+    if(t.length>500) t = t.slice(0,500)+"\n... (truncated)";
+    return t;
+  } catch(e){ return String(obj); }
+}
+async function jget(u){ const r=await fetch(u); const t=await r.text(); try{return JSON.parse(t);}catch{return {error:"Non-JSON",raw:t}}}
+async function jpost(u,d){ const r=await fetch(u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(d)}); const t=await r.text(); try{return JSON.parse(t);}catch{return {error:"Non-JSON",raw:t}}}
+function setUIEnabled(on){ $("sampleIndex").disabled=!on; $("cirChart").classList.toggle("dim",!on); }
+
+// results table
+function renderTable(j){
+  const body = $("resultsTable").querySelector("tbody");
+  body.innerHTML="";
+  const u=j.units||{};
+  const rows=[
+    ["delay_spread_ns",j.delay_spread_ns,u.delay_spread_ns||"ns"],
+    ["lgr_db",j.lgr_db,u.lgr_db||"dB"],
+    ["p_LOS",j.p_LOS,u.p_LOS||"prob"],
+    ["p_LOS_percent",j.p_LOS_percent,u.p_LOS_percent||"%"],
+    ["p_NLOS",j.p_NLOS,u.p_NLOS||"prob"],
+    ["p_NLOS_percent",j.p_NLOS_percent,u.p_NLOS_percent||"%"]
+  ];
+  rows.forEach(([k,v,unit])=>{
+    if(v===undefined) return;
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${k}</td><td>${Number(v).toFixed(6)}</td><td>${unit}</td>`;
+    body.appendChild(tr);
+  });
+  $("resultsTable").style.display="";
+}
+
+// plot
+function plotCIR(t,input,recon){
+  const labels=t ?? [...Array(input.length).keys()];
+  cirChart?.destroy();
+  cirChart=new Chart($("cirChart"), {
+    type:"line",
+    data:{ labels, datasets:[
+      {label:"Input CIR",data:input,borderWidth:1,pointRadius:0},
+      {label:"Reconstruction",data:recon,borderWidth:1,pointRadius:0}
+    ]},
+    options:{
+      animation:false,
+      plugins:{legend:{position:"top"}},
+      scales:{
+        x:{title:{display:true,text:t?"Time (ns)":"Index"}},
+        y:{title:{display:true,text:"Amplitude"}}
+      }
+    }
+  });
+}
+
+// load sample + predict
+async function loadSample(i){
+  const j=await jget(`/sample?i=${i}`);
+  if(j.error){$("out").textContent=truncate(j);return j;}
+  currentCIR=j.cir; currentT=j.t_ns||null;
+  totalSamples=j.count||0;
+  $("sampleIndex").min=0;
+  $("sampleIndex").max=(totalSamples>0)?(totalSamples-1):0;
+  $("sampleCount").textContent=(totalSamples>0)?`(0…${totalSamples-1})`:"";
+  $("activeBatch").textContent=j.active_batch??"(none)";
+  return j;
+}
+
+async function predict(){
+  if(!currentCIR){$("out").textContent="Select dataset & sample first.";return;}
+  const r=await jpost("/predict",{cir:currentCIR,scaled:true});
+  $("out").textContent=truncate(r);
+  if(!r.error){
+    renderTable(r);
+    plotCIR(currentT,currentCIR,r.reconstruction);
+  }
+}
+
+async function loadAndPredict(i){ const s=await loadSample(i); if(!s||s.error)return; await predict(); }
+
+// load dataset list
+async function loadBatches(){
+  const j=await jget("/batches");
+  const sel=$("fileSelect");
+  sel.innerHTML="";
+
+  const ph=document.createElement("option");
+  ph.value=""; ph.textContent="(select dataset)"; ph.disabled=true; ph.selected=!j.active;
+  sel.appendChild(ph);
+
+  (j.files||[]).forEach(f=>{
+    const o=document.createElement("option");
+    o.value=f; o.textContent=f;
+    if(j.active && f===j.active) o.selected=true;
+    sel.appendChild(o);
+  });
+
+  $("activeBatch").textContent=j.active||"(none)";
+
+  if(j.active){
+    setUIEnabled(true);
+    $("sampleIndex").value=0;
+    await loadAndPredict(0);
+  } else setUIEnabled(false);
+}
+
+// events
+$("fileSelect").addEventListener("change",async e=>{ await jpost("/set_batch",{file:e.target.value}); await loadBatches(); });
+
+$("sampleIndex").addEventListener("input",()=>{
+  if($("sampleIndex").disabled) return;
+  clearTimeout(debounceTimer);
+  debounceTimer=setTimeout(async()=>{
+    await loadAndPredict(parseInt($("sampleIndex").value||"0"));
+  },300);
+});
+
+// boot
+$("activeBatch").textContent="(none)";
+setUIEnabled(false);
+loadBatches();
+</script>
+</body>
+</html>

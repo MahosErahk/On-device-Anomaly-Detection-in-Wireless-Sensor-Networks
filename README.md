@@ -1,8 +1,11 @@
 # UV Wireless Sensor Network Anomaly Detection
 
+
 This repository contains the implementation of an Intelligent Anomaly Detection framework for ultraviolet (UV) wireless sensor networks.
 
-## Features
+
+## Layout
+
 
 - UV-C wireless channel modeling with LOS and NLOS propagation
 - Synthetic Channel Impulse Response (CIR) dataset generation
@@ -85,6 +88,7 @@ Anomaly / No Anomaly
 - `saved_models/` — trained Keras models and scaler parameters.
 - `results/` and `figures/` — generated validation artefacts.
 - `old_code/` — unmodified research-prototype source retained for traceability.
+
 
 ## Quick start
 
