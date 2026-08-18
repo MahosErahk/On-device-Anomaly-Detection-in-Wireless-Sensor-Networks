@@ -1,6 +1,7 @@
 # UV Wireless Sensor Network Anomaly Detection
 
 
+
 This repository contains the implementation of an Intelligent Anomaly Detection framework for ultraviolet (UV) wireless sensor networks.
 
 
@@ -81,21 +82,8 @@ Anomaly / No Anomaly
 
 ```
 
-## Layout
-
-- `src/` — channel simulation, impairments, data generation, models, training, evaluation, and inference.
-- `demo/` — working Flask demos for the baseline and Transformer models.
-- `saved_models/` — trained Keras models and scaler parameters.
-- `results/` and `figures/` — generated validation artefacts.
-- `old_code/` — unmodified research-prototype source retained for traceability.
 
 
-## Quick start
 
-Install dependencies with `pip install -r requirements.txt`, then train a baseline model:
 
-```bash
-python -m src.train --model baseline --epochs 75
-```
 
-Add `--impairment fog` (or `temperature`, `ozone`, `mixed`) to train with an environmental condition. The supplied demos retain their original assets and can be launched from their respective folders with `python app.py` or `python app2.py`.
